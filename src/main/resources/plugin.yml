@@ -1,0 +1,9 @@
+name: Marriage-Genesis
+version: '${version}'
+main: com.ryushin.marriage.MarriagePlugin
+api-version: 1.21
+commands:
+  marry:
+    description: Menikah dengan pemain
+  family:
+    description: Mengelola relasi keluarga

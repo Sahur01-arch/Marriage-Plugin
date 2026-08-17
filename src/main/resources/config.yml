@@ -1,0 +1,20 @@
+# ===== Pengaturan Bond Level =====
+bond:
+  radius: 5.0              
+  max-daily-xp: 500        
+  xp-per-mine-block: 1
+  xp-per-fish: 3
+
+family:
+  enabled: true
+  allow-adoption: true      
+  max-children: 4           
+
+messages:
+  prefix: "&d[Marriage] &r"
+  propose-sent: "&aPermintaan nikah terkirim ke %player%!"
+  already-married: "&cKamu sudah menikah dengan %spouse%!"
+
+# ===== Database =====
+database:
+  file-name: "marriage.db"
