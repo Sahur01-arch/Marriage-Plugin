@@ -116,6 +116,23 @@ public class Database {
         }
     }
 
+    /**
+     * Update bond_xp dan bond_level satu pernikahan sekaligus.
+     * Dipanggil BondManager setelah hitung XP & level baru di memory.
+     */
+    public void updateBond(int marriageId, int bondXp, int bondLevel) {
+        String sql = "UPDATE marriage SET bond_xp = ?, bond_level = ? WHERE id = ?";
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, bondXp);
+            ps.setInt(2, bondLevel);
+            ps.setInt(3, marriageId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            logger.log(Level.SEVERE, "[Database] Gagal update bond xp/level", e);
+        }
+    }
+
     public void deleteMarriage(int marriageId) {
         String sql = "DELETE FROM marriage WHERE id = ?";
 

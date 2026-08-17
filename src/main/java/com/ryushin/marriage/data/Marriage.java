@@ -36,6 +36,12 @@ public class Marriage {
         return player1Uuid;
     }
 
+    // Setter ini dipakai BondManager setelah update database,
+    // supaya objek Marriage yang lagi dipegang command lain (misal /marry info)
+    // ikut ter-update tanpa perlu query ulang ke database.
+    public void setBondXp(int bondXp) { this.bondXp = bondXp; }
+    public void setBondLevel(int bondLevel) { this.bondLevel = bondLevel; }
+
     public int getId() { return id; }
     public UUID getPlayer1Uuid() { return player1Uuid; }
     public UUID getPlayer2Uuid() { return player2Uuid; }

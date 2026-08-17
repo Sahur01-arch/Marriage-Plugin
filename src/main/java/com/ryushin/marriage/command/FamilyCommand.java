@@ -43,7 +43,7 @@ public class FamilyCommand implements CommandExecutor {
         }
 
         if (args.length == 0) {
-            player.sendMessage("§cGunakan: /family <adopt|accept|deny|list|info> [player]");
+            player.sendMessage("§cGunakan: /family <adopt|accept|deny|list|info|remove> [player]");
             return true;
         }
 

@@ -224,9 +224,12 @@ public class PlayerListener implements Listener {
     /**
      * Tempat update Bond XP sebenarnya.
      *
-     * Untuk sementara hanya melakukan proses validasi.
-     * Method ini sengaja dipisahkan supaya nanti mudah
-     * menghubungkan ke Database.
+     * Diteruskan ke BondManager, yang akan:
+     * - update bond_xp/bond_level ke database (via Database.updateBond)
+     * - kirim pesan "bond-xp-gained" ke kedua pasangan
+     * - kalau XP-nya cukup buat naik level, kirim pesan "bond-level-up" juga
+     * Kedua pesan itu diambil dari config.yml lewat MessageUtil, jadi admin
+     * server bisa ubah teksnya tanpa recompile plugin.
      */
     private void processBondReward(
             Player player,
@@ -235,27 +238,7 @@ public class PlayerListener implements Listener {
             int xp
     ) {
 
-        /*
-         * TODO:
-         *
-         * marriage.addBondXp(xp);
-         *
-         * plugin.getDatabase().updateMarriageBond(
-         *     marriage.getId(),
-         *     marriage.getBondXp(),
-         *     marriage.getBondLevel()
-         * );
-         *
-         * Jangan menggunakan reflection untuk mengubah
-         * field private Marriage.
-         */
-
-        /*
-         * Feedback hanya jika memang ingin ditampilkan.
-         * Saat database update sudah tersedia,
-         * bagian ini bisa digunakan untuk memberi pesan
-         * ketika level naik.
-         */
+        plugin.getBondManager().addXp(marriage, xp);
     }
 
     /**

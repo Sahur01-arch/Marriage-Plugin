@@ -1,8 +1,8 @@
 name: Marriage-Plugin
-version: '1.0.0'
-authors: "Ryushin"
-website: "https://github.com/Sahur01-arch/Marriage-Plugin/"
+version: 1.0.1
 main: com.ryushin.marriage.MarriagePlugin
+author: Ryushin
+description: Plugin pernikahan simpel dan ringan
 api-version: 1.21
 commands:
   marry:

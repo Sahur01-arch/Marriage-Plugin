@@ -4,6 +4,7 @@ bond:
   max-daily-xp: 500        
   xp-per-mine-block: 1
   xp-per-fish: 3
+  xp-per-level: 100        # XP dibutuhkan naik level = xp-per-level * level saat ini
 
 family:
   enabled: true
@@ -14,6 +15,9 @@ messages:
   prefix: "&d[Marriage] &r"
   propose-sent: "&aPermintaan nikah terkirim ke %player%!"
   already-married: "&cKamu sudah menikah dengan %spouse%!"
+  bond-xp-gained: "&d❤ &fBond XP &a+%xp% &7(%total% XP)"
+  bond-level-up: "&d❤ &fBond Level naik menjadi &eLevel %level%&f!"
+  bond-daily-limit: "&cBond XP harian sudah mencapai batas &e%max% XP&c."
 
 # ===== Database =====
 database:

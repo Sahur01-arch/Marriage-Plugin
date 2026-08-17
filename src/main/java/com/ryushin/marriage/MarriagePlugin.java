@@ -3,6 +3,7 @@ package com.ryushin.marriage;
 import com.ryushin.marriage.command.MarryCommand;
 import com.ryushin.marriage.command.FamilyCommand;
 import com.ryushin.marriage.data.Database;
+import com.ryushin.marriage.bond.BondManager;
 import com.ryushin.marriage.listener.PlayerListener;
 import com.ryushin.marriage.listener.FamilyListener;
 import org.bukkit.command.PluginCommand;
@@ -12,6 +13,7 @@ import java.io.File;
 
 public class MarriagePlugin extends JavaPlugin {
     private Database database;
+    private BondManager bondManager;
     private static MarriagePlugin instance;
 
     private double bondRadius;
@@ -20,6 +22,7 @@ public class MarriagePlugin extends JavaPlugin {
 
     private MarryCommand marryCommand;
     private FamilyCommand familyCommand;
+    private PlayerListener playerListener;
 
     @Override
     public void onEnable() {
@@ -42,6 +45,8 @@ public class MarriagePlugin extends JavaPlugin {
         database.connect();
         database.initTables();
 
+        bondManager = new BondManager(this);
+
         /*
          * Register command memakai object command yang disimpan.
          * getCommand() dicek terlebih dahulu agar tidak terkena
@@ -62,8 +67,9 @@ public class MarriagePlugin extends JavaPlugin {
                 this
         );
 
+        playerListener = new PlayerListener(this);
         getServer().getPluginManager().registerEvents(
-                new PlayerListener(this),
+                playerListener,
                 this
         );
 
@@ -74,6 +80,11 @@ public class MarriagePlugin extends JavaPlugin {
     public void onDisable() {
         marryCommand = null;
         familyCommand = null;
+
+        if (playerListener != null) {
+            playerListener.shutdown();
+            playerListener = null;
+        }
 
         if (database != null) {
             database.close();
@@ -134,6 +145,10 @@ public class MarriagePlugin extends JavaPlugin {
 
     public Database getDatabase() {
         return database;
+    }
+
+    public BondManager getBondManager() {
+        return bondManager;
     }
 
     public double getBondRadius() {
