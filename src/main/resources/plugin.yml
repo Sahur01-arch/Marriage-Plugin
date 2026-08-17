@@ -1,5 +1,7 @@
-name: Marriage-Genesis
-version: '${version}'
+name: Marriage-Plugin
+version: '1.0.0'
+authors: "Ryushin"
+website: "https://github.com/Sahur01-arch/Marriage-Plugin/"
 main: com.ryushin.marriage.MarriagePlugin
 api-version: 1.21
 commands:
