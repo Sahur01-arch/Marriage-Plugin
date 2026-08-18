@@ -1,11 +1,21 @@
 name: Marriage-Plugin
-version: 1.0.1
+version: '1.0.2'
+description: "Plugin pernikahan dan sistem keluarga untuk server Minecraft"
+website: "https://github.com/Sahur01-arch/Marriage-Plugin/"
 main: com.ryushin.marriage.MarriagePlugin
+api-version: '1.21'
 author: Ryushin
-description: Plugin pernikahan simpel dan ringan
-api-version: 1.21
 commands:
   marry:
     description: Menikah dengan pemain
   family:
     description: Mengelola relasi keluarga
+  marriageadmin:
+    description: Perintah admin plugin (reload config, toggle debug)
+    permission: marriage.admin
+    permission-message: "&cKamu tidak punya izin menggunakan command ini."
+
+permissions:
+  marriage.admin:
+    description: Izin untuk reload config dan toggle debug mode
+    default: op

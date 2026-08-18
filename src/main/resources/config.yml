@@ -1,24 +1,90 @@
+# ===== Debug Mode =====
+# Kalau true, plugin akan cetak log tambahan ke console server
+# buat bantu troubleshooting (propose, adopsi, bond xp, dll).
+# Bisa juga di-toggle langsung in-game pakai /marriageadmin debug <on|off>
+debug: false
+
 # ===== Pengaturan Bond Level =====
 bond:
-  radius: 5.0              
-  max-daily-xp: 500        
+  radius: 5.0
+  max-daily-xp: 500
   xp-per-mine-block: 1
   xp-per-fish: 3
   xp-per-level: 100        # XP dibutuhkan naik level = xp-per-level * level saat ini
 
 family:
   enabled: true
-  allow-adoption: true      
-  max-children: 4           
-
-messages:
-  prefix: "&d[Marriage] &r"
-  propose-sent: "&aPermintaan nikah terkirim ke %player%!"
-  already-married: "&cKamu sudah menikah dengan %spouse%!"
-  bond-xp-gained: "&d❤ &fBond XP &a+%xp% &7(%total% XP)"
-  bond-level-up: "&d❤ &fBond Level naik menjadi &eLevel %level%&f!"
-  bond-daily-limit: "&cBond XP harian sudah mencapai batas &e%max% XP&c."
+  allow-adoption: true
+  max-children: 4
 
 # ===== Database =====
 database:
   file-name: "marriage.db"
+
+# ===== Pesan =====
+# Semua pesan di sini boleh diedit bebas, termasuk warna (pakai kode &).
+# Placeholder (%player%, %xp%, dst) HARUS tetap ada persis seperti aslinya,
+# hanya teks di sekitarnya yang boleh diubah.
+messages:
+  prefix: "&d[Marriage] &r"
+
+  # ===== Umum / Admin =====
+  no-permission: "&cKamu tidak punya izin menggunakan command ini."
+  config-reloaded: "&aKonfigurasi berhasil di-reload!"
+  debug-status: "&7Debug mode saat ini: %status%"
+  debug-usage: "&7Gunakan: /marriageadmin debug <on|off>"
+  debug-changed: "&7Debug mode sekarang: %status%"
+  admin-usage: "&cGunakan: /marriageadmin <reload|debug> [on|off]"
+  admin-unknown-action: "&cAksi tidak dikenal. Gunakan: reload, debug"
+
+  # ===== MarryCommand =====
+  usage-marry: "&cGunakan: /marry <propose|accept|deny|divorce|info> [player]"
+  unknown-action: "&cAksi tidak dikenal. Gunakan: propose, accept, deny, divorce, info"
+  usage-propose: "&cGunakan: /marry propose <player>"
+  cooldown-active: "&cTunggu %seconds% detik lagi sebelum membuat lamaran."
+  player-not-found: "&cPlayer tidak ditemukan atau sedang offline."
+  cannot-propose-self: "&cKamu tidak bisa melamar dirimu sendiri."
+  already-married-self: "&cKamu sudah menikah!"
+  target-already-married: "&c%player% sudah menikah dengan orang lain."
+  target-has-pending-proposal: "&cPlayer tersebut masih memiliki lamaran yang belum dijawab."
+  propose-sent: "&aLamaran terkirim ke %player%! Lamaran berlaku selama %timeout% detik."
+  propose-received: "&d%player% melamarmu! Ketik &f/marry accept &datau &f/marry deny &d(dalam %timeout% detik)."
+  propose-expired-target: "&7Lamaran dari %player% telah kadaluarsa."
+  propose-expired-sender: "&7Lamaranmu telah kadaluarsa."
+  no-pending-proposal: "&cTidak ada permintaan nikah yang menunggumu."
+  proposal-invalid-already-married: "&cLamaran ini sudah tidak valid karena pengirimnya sudah menikah."
+  marriage-success: "&aSelamat! Kamu sekarang menikah dengan %player%!"
+  marriage-success-notify-proposer: "&a%player% menerima lamaranmu! Selamat menikah!"
+  propose-denied: "&cKamu menolak permintaan nikah."
+  propose-denied-notify: "&c%player% menolak lamaranmu."
+  not-married: "&cKamu belum menikah."
+  divorce-success: "&cKamu resmi bercerai."
+  divorce-notify: "&c%player% mengajukan perceraian denganmu."
+
+  # ===== BondManager =====
+  bond-xp-gained: "&d❤ &fBond XP &a+%xp% &7(%total% XP)"
+  bond-level-up: "&d❤ &fBond Level naik menjadi &eLevel %level%&f!"
+  bond-daily-limit: "&cBond XP harian sudah mencapai batas &e%max% XP&c."
+
+  # ===== FamilyCommand =====
+  family-disabled: "&cSistem keluarga sedang dinonaktifkan."
+  family-usage: "&cGunakan: /family <adopt|accept|deny|list|info|remove> [player]"
+  family-unknown-action: "&cAksi tidak dikenal."
+  family-usage-adopt: "&cGunakan: /family adopt <player>"
+  family-adoption-disabled: "&cFitur adopsi sedang dinonaktifkan."
+  family-must-be-married: "&cKamu harus menikah dulu sebelum bisa mengadopsi anak."
+  family-max-children: "&cKamu sudah mencapai batas maksimal anak (%max%)."
+  family-cannot-adopt-self: "&cKamu tidak bisa mengadopsi diri sendiri."
+  family-target-has-parent: "&c%player% sudah punya orang tua."
+  family-adopt-sent: "&aPermintaan adopsi terkirim ke %player%!"
+  family-adopt-received: "&d%player% ingin mengadopsimu sebagai anak! Ketik /family accept dalam %timeout% detik."
+  family-adopt-expired: "&7Permintaan adopsi sudah kadaluarsa."
+  family-no-pending-adoption: "&cTidak ada permintaan adopsi yang menunggumu."
+  family-adopt-success: "&aKamu sekarang menjadi anak dari keluarga %player%!"
+  family-adopt-success-notify: "&a%player% menerima adopsimu!"
+  family-adopt-denied: "&cKamu menolak permintaan adopsi."
+  family-adopt-denied-notify: "&c%player% menolak adopsimu."
+  family-usage-remove: "&cGunakan: /family remove <player>"
+  family-not-your-child: "&cPlayer tersebut bukan anakmu."
+  family-remove-success: "&a%player% berhasil dikeluarkan dari keluarga."
+  family-remove-notify: "&eKamu tidak lagi terdaftar sebagai anak dari %player%."

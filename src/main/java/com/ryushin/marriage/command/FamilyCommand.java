@@ -4,20 +4,23 @@ import com.ryushin.marriage.MarriagePlugin;
 import com.ryushin.marriage.data.FamilyRelation;
 import com.ryushin.marriage.data.Marriage;
 import com.ryushin.marriage.data.RelationType;
+import com.ryushin.marriage.util.MessageUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public class FamilyCommand implements CommandExecutor {
+public class FamilyCommand implements CommandExecutor, TabCompleter {
 
     private final MarriagePlugin plugin;
 
@@ -38,12 +41,12 @@ public class FamilyCommand implements CommandExecutor {
         }
 
         if (!plugin.isFamilySystemEnabled()) {
-            player.sendMessage("§cSistem keluarga sedang dinonaktifkan.");
+            player.sendMessage(MessageUtil.get(plugin, "family-disabled"));
             return true;
         }
 
         if (args.length == 0) {
-            player.sendMessage("§cGunakan: /family <adopt|accept|deny|list|info|remove> [player]");
+            player.sendMessage(MessageUtil.get(plugin, "family-usage"));
             return true;
         }
 
@@ -56,7 +59,7 @@ public class FamilyCommand implements CommandExecutor {
             case "list" -> handleList(player);
             case "info" -> handleInfo(player, args);
             case "remove" -> handleRemoveChild(player, args);
-            default -> player.sendMessage("§cAksi tidak dikenal.");
+            default -> player.sendMessage(MessageUtil.get(plugin, "family-unknown-action"));
         }
 
         return true;
@@ -64,19 +67,19 @@ public class FamilyCommand implements CommandExecutor {
 
     private void handleAdopt(Player sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage("§cGunakan: /family adopt <player>");
+            sender.sendMessage(MessageUtil.get(plugin, "family-usage-adopt"));
             return;
         }
 
         if (!plugin.getConfig().getBoolean("family.allow-adoption", true)) {
-            sender.sendMessage("§cFitur adopsi sedang dinonaktifkan.");
+            sender.sendMessage(MessageUtil.get(plugin, "family-adoption-disabled"));
             return;
         }
 
         // Syarat: harus sudah menikah dulu baru bisa adopsi
         Marriage marriage = plugin.getDatabase().getMarriageByPlayer(sender.getUniqueId());
         if (marriage == null) {
-            sender.sendMessage("§cKamu harus menikah dulu sebelum bisa mengadopsi anak.");
+            sender.sendMessage(MessageUtil.get(plugin, "family-must-be-married"));
             return;
         }
 
@@ -84,32 +87,39 @@ public class FamilyCommand implements CommandExecutor {
         int maxChildren = plugin.getConfig().getInt("family.max-children", 4);
         int currentChildren = plugin.getDatabase().countChildren(sender.getUniqueId());
         if (currentChildren >= maxChildren) {
-            sender.sendMessage("§cKamu sudah mencapai batas maksimal anak (" + maxChildren + ").");
+            sender.sendMessage(MessageUtil.get(plugin, "family-max-children",
+                    Map.of("max", String.valueOf(maxChildren))));
             return;
         }
 
         Player target = Bukkit.getPlayer(args[1]);
         if (target == null) {
-            sender.sendMessage("§cPlayer tidak ditemukan atau sedang offline.");
+            sender.sendMessage(MessageUtil.get(plugin, "player-not-found"));
             return;
         }
 
         if (target.getUniqueId().equals(sender.getUniqueId())) {
-            sender.sendMessage("§cKamu tidak bisa mengadopsi diri sendiri.");
+            sender.sendMessage(MessageUtil.get(plugin, "family-cannot-adopt-self"));
             return;
         }
 
         // Cek target sudah punya orang tua belum
         List<FamilyRelation> targetParents = plugin.getDatabase().getRelationsByPlayer(target.getUniqueId(), RelationType.CHILD);
         if (!targetParents.isEmpty()) {
-            sender.sendMessage("§c" + target.getName() + " sudah punya orang tua.");
+            sender.sendMessage(MessageUtil.get(plugin, "family-target-has-parent",
+                    Map.of("player", target.getName())));
             return;
         }
 
         pendingAdoptions.put(target.getUniqueId(), sender.getUniqueId());
 
-        sender.sendMessage("§aPermintaan adopsi terkirim ke " + target.getName() + "!");
-        target.sendMessage("§d" + sender.getName() + " ingin mengadopsimu sebagai anak! Ketik /family accept dalam " + TIMEOUT_SECONDS + " detik.");
+        sender.sendMessage(MessageUtil.get(plugin, "family-adopt-sent", Map.of("player", target.getName())));
+        target.sendMessage(MessageUtil.get(plugin, "family-adopt-received", Map.of(
+                "player", sender.getName(),
+                "timeout", String.valueOf(TIMEOUT_SECONDS)
+        )));
+
+        plugin.debugLog("Adopt request: " + sender.getName() + " -> " + target.getName());
 
         UUID targetUuid = target.getUniqueId();
         UUID senderUuid = sender.getUniqueId();
@@ -121,7 +131,8 @@ public class FamilyCommand implements CommandExecutor {
                 if (masihAda != null && masihAda.equals(senderUuid)) {
                     pendingAdoptions.remove(targetUuid);
                     Player t = Bukkit.getPlayer(targetUuid);
-                    if (t != null) t.sendMessage("§7Permintaan adopsi sudah kadaluarsa.");
+                    if (t != null) t.sendMessage(MessageUtil.get(plugin, "family-adopt-expired"));
+                    plugin.debugLog("Adopt timeout: " + senderUuid + " -> " + targetUuid);
                 }
             }
         }.runTaskLater(plugin, TIMEOUT_SECONDS * 20L);
@@ -130,7 +141,7 @@ public class FamilyCommand implements CommandExecutor {
     private void handleAcceptAdoption(Player player) {
         UUID parentUuid = pendingAdoptions.get(player.getUniqueId());
         if (parentUuid == null) {
-            player.sendMessage("§cTidak ada permintaan adopsi yang menunggumu.");
+            player.sendMessage(MessageUtil.get(plugin, "family-no-pending-adoption"));
             return;
         }
 
@@ -153,25 +164,29 @@ public class FamilyCommand implements CommandExecutor {
         pendingAdoptions.remove(player.getUniqueId());
 
         OfflinePlayer parent = Bukkit.getOfflinePlayer(parentUuid);
-        player.sendMessage("§aKamu sekarang menjadi anak dari keluarga " + parent.getName() + "!");
+        player.sendMessage(MessageUtil.get(plugin, "family-adopt-success", Map.of("player", parent.getName())));
 
         Player parentOnline = Bukkit.getPlayer(parentUuid);
         if (parentOnline != null) {
-            parentOnline.sendMessage("§a" + player.getName() + " menerima adopsimu!");
+            parentOnline.sendMessage(MessageUtil.get(plugin, "family-adopt-success-notify",
+                    Map.of("player", player.getName())));
         }
+
+        plugin.debugLog("Adoption confirmed: " + parentUuid + " adopted " + childUuid);
     }
 
     private void handleDenyAdoption(Player player) {
         UUID parentUuid = pendingAdoptions.remove(player.getUniqueId());
         if (parentUuid == null) {
-            player.sendMessage("§cTidak ada permintaan adopsi yang menunggumu.");
+            player.sendMessage(MessageUtil.get(plugin, "family-no-pending-adoption"));
             return;
         }
 
-        player.sendMessage("§cKamu menolak permintaan adopsi.");
+        player.sendMessage(MessageUtil.get(plugin, "family-adopt-denied"));
         Player parent = Bukkit.getPlayer(parentUuid);
         if (parent != null) {
-            parent.sendMessage("§c" + player.getName() + " menolak adopsimu.");
+            parent.sendMessage(MessageUtil.get(plugin, "family-adopt-denied-notify",
+                    Map.of("player", player.getName())));
         }
     }
 
@@ -181,50 +196,65 @@ public class FamilyCommand implements CommandExecutor {
         List<FamilyRelation> children = plugin.getDatabase().getRelationsByPlayer(uuid, RelationType.PARENT);
         List<FamilyRelation> parents = plugin.getDatabase().getRelationsByPlayer(uuid, RelationType.CHILD);
 
-        player.sendMessage("§d=== Keluarga " + player.getName() + " ===");
-
-        // Tampilkan orang tua
-        if (!parents.isEmpty()) {
-            player.sendMessage("§7Orang tua:");
-            for (FamilyRelation rel : parents) {
-                String nama = Bukkit.getOfflinePlayer(rel.getRelatedUuid()).getName();
-                player.sendMessage("  §f- " + nama);
-            }
-
-            // Cari kakek/nenek: orang tua dari orang tua
-            player.sendMessage("§7Kakek/Nenek:");
-            for (FamilyRelation ortu : parents) {
-                List<FamilyRelation> kakekNenek = plugin.getDatabase().getRelationsByPlayer(ortu.getRelatedUuid(), RelationType.CHILD);
-                for (FamilyRelation kn : kakekNenek) {
-                    String nama = Bukkit.getOfflinePlayer(kn.getRelatedUuid()).getName();
-                    player.sendMessage("  §f- " + nama);
-                }
+        // Kakek/nenek dihitung dari 2 langkah: orang tua dari tiap orang tuaku
+        List<UUID> kakekNenekUuid = new java.util.ArrayList<>();
+        for (FamilyRelation ortu : parents) {
+            List<FamilyRelation> ortuDariOrtu = plugin.getDatabase()
+                    .getRelationsByPlayer(ortu.getRelatedUuid(), RelationType.CHILD);
+            for (FamilyRelation kn : ortuDariOrtu) {
+                kakekNenekUuid.add(kn.getRelatedUuid());
             }
         }
 
-        // Tampilkan anak
-        if (!children.isEmpty()) {
-            player.sendMessage("§7Anak:");
-            for (FamilyRelation rel : children) {
-                String nama = Bukkit.getOfflinePlayer(rel.getRelatedUuid()).getName();
-                player.sendMessage("  §f- " + nama);
-            }
-        }
+        player.sendMessage("§8§m                                        ");
+        player.sendMessage("§d§l          ❀ POHON KELUARGA ❀");
+        player.sendMessage("§8§m                                        ");
+        player.sendMessage("");
+
+        tampilkanBagian(player, "Orang Tua", parents.stream().map(FamilyRelation::getRelatedUuid).toList());
+        tampilkanBagian(player, "Kakek/Nenek", kakekNenekUuid);
+        tampilkanBagian(player, "Anak", children.stream().map(FamilyRelation::getRelatedUuid).toList());
 
         if (parents.isEmpty() && children.isEmpty()) {
-            player.sendMessage("§7Kamu belum punya relasi keluarga.");
+            player.sendMessage(" §7Kamu belum punya relasi keluarga.");
+            player.sendMessage("");
         }
+
+        player.sendMessage("§8§m                                        ");
     }
 
     /**
-     * Emergency patch:
+     * Cetak 1 bagian pohon keluarga (Orang Tua / Kakek-Nenek / Anak) dengan
+     * status online/offline tiap anggotanya. Kalau list-nya kosong, bagian
+     * ini di-skip total (nggak nampilin header kosong).
+     */
+    private void tampilkanBagian(Player viewer, String label, List<UUID> uuids) {
+        if (uuids.isEmpty()) return;
+
+        sendLine(viewer, " §7" + label + " §8(" + uuids.size() + ")");
+        for (UUID relUuid : uuids) {
+            Player online = Bukkit.getPlayer(relUuid);
+            String nama = online != null ? online.getName() : Bukkit.getOfflinePlayer(relUuid).getName();
+            if (nama == null) nama = relUuid.toString();
+
+            String status = online != null ? "§a● Online" : "§7● Offline";
+            sendLine(viewer, "   §8» §f" + nama + "  " + status);
+        }
+        sendLine(viewer, "");
+    }
+
+    // Helper kecil biar baris di atas nggak kepanjangan - cuma alias sendMessage
+    private void sendLine(Player p, String msg) {
+        p.sendMessage(msg);
+    }
+
+    /**
      * /family remove <player>
-     *
      * Mengeluarkan anak dari keluarga dan menghapus kedua sisi relasi.
      */
     private void handleRemoveChild(Player sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage("§cGunakan: /family remove <player>");
+            sender.sendMessage(MessageUtil.get(plugin, "family-usage-remove"));
             return;
         }
 
@@ -252,7 +282,7 @@ public class FamilyCommand implements CommandExecutor {
                 .orElse(null);
 
         if (relation == null) {
-            sender.sendMessage("§cPlayer tersebut bukan anakmu.");
+            sender.sendMessage(MessageUtil.get(plugin, "family-not-your-child"));
             return;
         }
 
@@ -268,16 +298,14 @@ public class FamilyCommand implements CommandExecutor {
                 RelationType.CHILD
         );
 
-        sender.sendMessage(
-                "§a" + args[1] + " berhasil dikeluarkan dari keluarga."
-        );
+        sender.sendMessage(MessageUtil.get(plugin, "family-remove-success", Map.of("player", args[1])));
 
         if (target != null) {
-            target.sendMessage(
-                    "§eKamu tidak lagi terdaftar sebagai anak dari "
-                            + sender.getName() + "."
-            );
+            target.sendMessage(MessageUtil.get(plugin, "family-remove-notify",
+                    Map.of("player", sender.getName())));
         }
+
+        plugin.debugLog("Family relation removed: " + parentUuid + " x " + childUuid);
     }
 
     private void handleInfo(Player player, String[] args) {
@@ -288,5 +316,36 @@ public class FamilyCommand implements CommandExecutor {
     public void clearAdoptionsFor(UUID uuid) {
         pendingAdoptions.remove(uuid);
         pendingAdoptions.values().removeIf(v -> v.equals(uuid));
+    }
+
+    /**
+     * Saran auto-complete /family.
+     * - Argumen ke-2 cuma disaranin buat aksi yang memang butuh nama player
+     *   (adopt, remove) - accept/deny/list/info nggak perlu argumen tambahan.
+     */
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (args.length == 1) {
+            List<String> aksi = List.of("adopt", "accept", "deny", "list", "info", "remove");
+            List<String> hasil = new ArrayList<>();
+            for (String a : aksi) {
+                if (a.startsWith(args[0].toLowerCase())) {
+                    hasil.add(a);
+                }
+            }
+            return hasil;
+        }
+
+        if (args.length == 2 && (args[0].equalsIgnoreCase("adopt") || args[0].equalsIgnoreCase("remove"))) {
+            List<String> hasil = new ArrayList<>();
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase().startsWith(args[1].toLowerCase())) {
+                    hasil.add(p.getName());
+                }
+            }
+            return hasil;
+        }
+
+        return List.of();
     }
 }

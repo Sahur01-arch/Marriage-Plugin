@@ -2,18 +2,22 @@ package com.ryushin.marriage.command;
 
 import com.ryushin.marriage.MarriagePlugin;
 import com.ryushin.marriage.data.Marriage;
+import com.ryushin.marriage.util.MessageUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public class MarryCommand implements CommandExecutor {
+public class MarryCommand implements CommandExecutor, TabCompleter {
 
     private final MarriagePlugin plugin;
     private final Map<UUID, UUID> pendingProposals = new HashMap<>();
@@ -37,7 +41,7 @@ public class MarryCommand implements CommandExecutor {
         Player player = (Player) sender;
 
         if (args.length == 0) {
-            player.sendMessage("§cGunakan: /marry <propose|accept|deny|divorce|info> [player]");
+            player.sendMessage(MessageUtil.get(plugin, "usage-marry"));
             return true;
         }
 
@@ -58,7 +62,7 @@ public class MarryCommand implements CommandExecutor {
                 handleInfo(player);
                 break;
             default:
-                player.sendMessage("§cAksi tidak dikenal. Gunakan: propose, accept, deny, divorce, info");
+                player.sendMessage(MessageUtil.get(plugin, "unknown-action"));
                 break;
         }
         return true;
@@ -67,7 +71,7 @@ public class MarryCommand implements CommandExecutor {
     private void handlePropose(Player sender, String[] args) {
         synchronized (marriageLock) {
             if (args.length < 2) {
-                sender.sendMessage("§cGunakan: /marry propose <player>");
+                sender.sendMessage(MessageUtil.get(plugin, "usage-propose"));
                 return;
             }
 
@@ -78,7 +82,8 @@ public class MarryCommand implements CommandExecutor {
             if (cooldownEnd != null) {
                 if (cooldownEnd > now) {
                     long remaining = Math.max(1, (cooldownEnd - now + 999L) / 1000L);
-                    sender.sendMessage("§cTunggu " + remaining + " detik lagi sebelum membuat lamaran.");
+                    sender.sendMessage(MessageUtil.get(plugin, "cooldown-active",
+                            Map.of("seconds", String.valueOf(remaining))));
                     return;
                 }
                 cooldowns.remove(senderUuid);
@@ -86,36 +91,45 @@ public class MarryCommand implements CommandExecutor {
 
             Player target = Bukkit.getPlayerExact(args[1]);
             if (target == null) {
-                sender.sendMessage("§cPlayer tidak ditemukan atau sedang offline.");
+                sender.sendMessage(MessageUtil.get(plugin, "player-not-found"));
                 return;
             }
 
             UUID targetUuid = target.getUniqueId();
             if (senderUuid.equals(targetUuid)) {
-                sender.sendMessage("§cKamu tidak bisa melamar dirimu sendiri.");
+                sender.sendMessage(MessageUtil.get(plugin, "cannot-propose-self"));
                 return;
             }
 
             if (plugin.getDatabase().getMarriageByPlayer(senderUuid) != null) {
-                sender.sendMessage("§cKamu sudah menikah!");
+                sender.sendMessage(MessageUtil.get(plugin, "already-married-self"));
                 return;
             }
 
             if (plugin.getDatabase().getMarriageByPlayer(targetUuid) != null) {
-                sender.sendMessage("§c" + target.getName() + " sudah menikah dengan orang lain.");
+                sender.sendMessage(MessageUtil.get(plugin, "target-already-married",
+                        Map.of("player", target.getName())));
                 return;
             }
 
             if (pendingProposals.containsKey(targetUuid)) {
-                sender.sendMessage("§cPlayer tersebut masih memiliki lamaran yang belum dijawab.");
+                sender.sendMessage(MessageUtil.get(plugin, "target-has-pending-proposal"));
                 return;
             }
 
             pendingProposals.put(targetUuid, senderUuid);
             cooldowns.put(senderUuid, now + COOLDOWN_SECONDS * 1000L);
 
-            sender.sendMessage("§aLamaran terkirim ke " + target.getName() + "! Lamaran berlaku selama " + TIMEOUT_SECONDS + " detik.");
-            target.sendMessage("§d" + sender.getName() + " melamarmu! Ketik §f/marry accept §datau §f/marry deny §d(dalam " + TIMEOUT_SECONDS + " detik).");
+            sender.sendMessage(MessageUtil.get(plugin, "propose-sent", Map.of(
+                    "player", target.getName(),
+                    "timeout", String.valueOf(TIMEOUT_SECONDS)
+            )));
+            target.sendMessage(MessageUtil.get(plugin, "propose-received", Map.of(
+                    "player", sender.getName(),
+                    "timeout", String.valueOf(TIMEOUT_SECONDS)
+            )));
+
+            plugin.debugLog("Propose: " + sender.getName() + " -> " + target.getName());
 
             new BukkitRunnable() {
                 @Override
@@ -132,11 +146,15 @@ public class MarryCommand implements CommandExecutor {
                         Player senderPlayer = Bukkit.getPlayer(senderUuid);
 
                         if (targetPlayer != null) {
-                            targetPlayer.sendMessage("§7Lamaran dari " + (senderPlayer != null ? senderPlayer.getName() : "player") + " telah kadaluarsa.");
+                            String namaSender = senderPlayer != null ? senderPlayer.getName() : "player";
+                            targetPlayer.sendMessage(MessageUtil.get(plugin, "propose-expired-target",
+                                    Map.of("player", namaSender)));
                         }
                         if (senderPlayer != null) {
-                            senderPlayer.sendMessage("§7Lamaranmu telah kadaluarsa.");
+                            senderPlayer.sendMessage(MessageUtil.get(plugin, "propose-expired-sender"));
                         }
+
+                        plugin.debugLog("Propose timeout: " + senderUuid + " -> " + targetUuid);
                     }
                 }
             }.runTaskLater(plugin, TIMEOUT_SECONDS * 20L);
@@ -149,7 +167,7 @@ public class MarryCommand implements CommandExecutor {
             UUID proposerUuid = pendingProposals.get(playerUuid);
 
             if (proposerUuid == null) {
-                player.sendMessage("§cTidak ada permintaan nikah yang menunggumu.");
+                player.sendMessage(MessageUtil.get(plugin, "no-pending-proposal"));
                 return;
             }
 
@@ -157,13 +175,13 @@ public class MarryCommand implements CommandExecutor {
             // setelah salah satu pihak sudah menikah.
             if (plugin.getDatabase().getMarriageByPlayer(playerUuid) != null) {
                 pendingProposals.remove(playerUuid);
-                player.sendMessage("§cKamu sudah menikah.");
+                player.sendMessage(MessageUtil.get(plugin, "already-married-self"));
                 return;
             }
 
             if (plugin.getDatabase().getMarriageByPlayer(proposerUuid) != null) {
                 pendingProposals.remove(playerUuid);
-                player.sendMessage("§cLamaran ini sudah tidak valid karena pengirimnya sudah menikah.");
+                player.sendMessage(MessageUtil.get(plugin, "proposal-invalid-already-married"));
                 return;
             }
 
@@ -172,10 +190,14 @@ public class MarryCommand implements CommandExecutor {
             pendingProposals.remove(playerUuid);
 
             Player proposer = Bukkit.getPlayer(proposerUuid);
-            player.sendMessage("§aSelamat! Kamu sekarang menikah dengan " + (proposer != null ? proposer.getName() : "pasanganmu") + "!");
+            String namaProposer = proposer != null ? proposer.getName() : "pasanganmu";
+            player.sendMessage(MessageUtil.get(plugin, "marriage-success", Map.of("player", namaProposer)));
             if (proposer != null) {
-                proposer.sendMessage("§a" + player.getName() + " menerima lamaranmu! Selamat menikah!");
+                proposer.sendMessage(MessageUtil.get(plugin, "marriage-success-notify-proposer",
+                        Map.of("player", player.getName())));
             }
+
+            plugin.debugLog("Marriage created: " + proposerUuid + " + " + playerUuid);
         }
     }
 
@@ -183,14 +205,15 @@ public class MarryCommand implements CommandExecutor {
         synchronized (marriageLock) {
             UUID proposerUuid = pendingProposals.remove(player.getUniqueId());
             if (proposerUuid == null) {
-                player.sendMessage("§cTidak ada permintaan nikah yang menunggumu.");
+                player.sendMessage(MessageUtil.get(plugin, "no-pending-proposal"));
                 return;
             }
 
-            player.sendMessage("§cKamu menolak permintaan nikah.");
+            player.sendMessage(MessageUtil.get(plugin, "propose-denied"));
             Player proposer = Bukkit.getPlayer(proposerUuid);
             if (proposer != null) {
-                proposer.sendMessage("§c" + player.getName() + " menolak lamaranmu.");
+                proposer.sendMessage(MessageUtil.get(plugin, "propose-denied-notify",
+                        Map.of("player", player.getName())));
             }
         }
     }
@@ -199,18 +222,21 @@ public class MarryCommand implements CommandExecutor {
         synchronized (marriageLock) {
             Marriage marriage = plugin.getDatabase().getMarriageByPlayer(player.getUniqueId());
             if (marriage == null) {
-                player.sendMessage("§cKamu belum menikah.");
+                player.sendMessage(MessageUtil.get(plugin, "not-married"));
                 return;
             }
 
             UUID pasanganUuid = marriage.getOtherPlayer(player.getUniqueId());
             plugin.getDatabase().deleteMarriage(marriage.getId());
 
-            player.sendMessage("§cKamu resmi bercerai.");
+            player.sendMessage(MessageUtil.get(plugin, "divorce-success"));
             Player pasangan = Bukkit.getPlayer(pasanganUuid);
             if (pasangan != null) {
-                pasangan.sendMessage("§c" + player.getName() + " mengajukan perceraian denganmu.");
+                pasangan.sendMessage(MessageUtil.get(plugin, "divorce-notify",
+                        Map.of("player", player.getName())));
             }
+
+            plugin.debugLog("Divorce: " + player.getUniqueId() + " x " + pasanganUuid);
         }
     }
 
@@ -228,10 +254,67 @@ public class MarryCommand implements CommandExecutor {
             namaPasangan = pasanganUuid.toString();
         }
 
-        player.sendMessage("§d=== Status Pernikahan ===");
-        player.sendMessage("§7Pasangan: §f" + namaPasangan);
-        player.sendMessage("§7Bond Level: §f" + marriage.getBondLevel());
-        player.sendMessage("§7Bond XP: §f" + marriage.getBondXp());
+        boolean online = pasangan != null;
+        String statusOnline = online ? "§a● Online" : "§7● Offline";
+
+        int xpPerLevel = plugin.getConfig().getInt("bond.xp-per-level", 100);
+        int level = marriage.getBondLevel();
+        int xp = marriage.getBondXp();
+        int xpDibutuhkan = xpPerLevel * level;
+
+        String progressBar = buatProgressBar(xp, xpDibutuhkan, 20);
+        String lamaMenikah = formatDurasi(System.currentTimeMillis() - marriage.getMarriedAt());
+
+        player.sendMessage("§8§m                                        ");
+        player.sendMessage("§d§l          ❤ STATUS PERNIKAHAN ❤");
+        player.sendMessage("§8§m                                        ");
+        player.sendMessage("");
+        player.sendMessage(" §7Pasangan   §8» §f" + namaPasangan + "  " + statusOnline);
+        player.sendMessage(" §7Menikah sejak §8» §f" + lamaMenikah + " yang lalu");
+        player.sendMessage("");
+        player.sendMessage(" §7Bond Level §8» §e★ Level " + level);
+        player.sendMessage(" " + progressBar + " §7" + xp + "§8/§7" + xpDibutuhkan + " §fXP");
+        player.sendMessage("");
+        player.sendMessage("§8§m                                        ");
+    }
+
+    /**
+     * Bikin progress bar teks pakai karakter blok, contoh hasil:
+     * "§d██████████§7░░░░░░░░░░"
+     */
+    private String buatProgressBar(int current, int max, int panjang) {
+        if (max <= 0) max = 1; // jaga-jaga cegah pembagian dengan nol
+
+        int terisi = (int) Math.min(panjang, Math.round((current / (double) max) * panjang));
+        int kosong = panjang - terisi;
+
+        StringBuilder bar = new StringBuilder("§d");
+        bar.append("█".repeat(Math.max(0, terisi)));
+        bar.append("§7");
+        bar.append("░".repeat(Math.max(0, kosong)));
+
+        return bar.toString();
+    }
+
+    /**
+     * Ubah selisih waktu (milidetik) jadi teks durasi ringkas,
+     * contoh: "3 hari 4 jam" atau "12 menit".
+     */
+    private String formatDurasi(long selisihMillis) {
+        long detik = selisihMillis / 1000;
+        long hari = detik / 86400;
+        long jam = (detik % 86400) / 3600;
+        long menit = (detik % 3600) / 60;
+
+        if (hari > 0) {
+            return hari + " hari " + jam + " jam";
+        } else if (jam > 0) {
+            return jam + " jam " + menit + " menit";
+        } else if (menit > 0) {
+            return menit + " menit";
+        } else {
+            return "baru saja";
+        }
     }
 
     public void clearProposalsFor(UUID uuid) {
@@ -240,5 +323,38 @@ public class MarryCommand implements CommandExecutor {
             pendingProposals.entrySet().removeIf(entry -> uuid.equals(entry.getValue()));
             cooldowns.remove(uuid);
         }
+    }
+
+    /**
+     * Saran auto-complete saat player ngetik /marry lalu tekan Tab.
+     * - Argumen ke-1 (aksi): saring dari daftar tetap sesuai huruf yang sudah diketik.
+     * - Argumen ke-2 (nama player): CUMA muncul buat aksi "propose", karena
+     *   accept/deny/divorce/info nggak butuh nama target (otomatis dari data
+     *   proposal/marriage yang tersimpan).
+     */
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (args.length == 1) {
+            List<String> aksi = List.of("propose", "accept", "deny", "divorce", "info");
+            List<String> hasil = new ArrayList<>();
+            for (String a : aksi) {
+                if (a.startsWith(args[0].toLowerCase())) {
+                    hasil.add(a);
+                }
+            }
+            return hasil;
+        }
+
+        if (args.length == 2 && args[0].equalsIgnoreCase("propose")) {
+            List<String> hasil = new ArrayList<>();
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (p.getName().toLowerCase().startsWith(args[1].toLowerCase())) {
+                    hasil.add(p.getName());
+                }
+            }
+            return hasil;
+        }
+
+        return List.of(); // tidak ada saran buat argumen selanjutnya
     }
 }

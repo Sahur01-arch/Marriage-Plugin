@@ -2,6 +2,7 @@ package com.ryushin.marriage;
 
 import com.ryushin.marriage.command.MarryCommand;
 import com.ryushin.marriage.command.FamilyCommand;
+import com.ryushin.marriage.command.AdminCommand;
 import com.ryushin.marriage.data.Database;
 import com.ryushin.marriage.bond.BondManager;
 import com.ryushin.marriage.listener.PlayerListener;
@@ -19,6 +20,7 @@ public class MarriagePlugin extends JavaPlugin {
     private double bondRadius;
     private int maxDailyBondXp;
     private boolean familySystemEnabled;
+    private boolean debug;
 
     private MarryCommand marryCommand;
     private FamilyCommand familyCommand;
@@ -57,6 +59,8 @@ public class MarriagePlugin extends JavaPlugin {
 
         familyCommand = new FamilyCommand(this);
         registerCommand("family", familyCommand);
+
+        registerCommand("marriageadmin", new AdminCommand(this));
 
         /*
          * FamilyListener menggunakan instance FamilyCommand yang sama
@@ -117,6 +121,9 @@ public class MarriagePlugin extends JavaPlugin {
         }
 
         command.setExecutor(executor);
+        if (executor instanceof org.bukkit.command.TabCompleter tabCompleter) {
+            command.setTabCompleter(tabCompleter);
+        }
     }
 
     private void loadConfigValues() {
@@ -136,11 +143,44 @@ public class MarriagePlugin extends JavaPlugin {
                 "family.enabled",
                 true
         );
+
+        debug = config.getBoolean("debug", false);
     }
 
     public void reloadPluginConfig() {
         reloadConfig();
         loadConfigValues();
+        getLogger().info("Config berhasil di-reload. Debug mode: " + (debug ? "ON" : "OFF"));
+    }
+
+    /**
+     * Cek apakah debug mode aktif. Dipakai class lain (command, listener,
+     * bond manager) buat memutuskan apakah perlu cetak log tambahan.
+     */
+    public boolean isDebug() {
+        return debug;
+    }
+
+    /**
+     * Toggle debug mode secara langsung (misal dari /marriageadmin debug on/off),
+     * sekaligus disimpan ke config.yml supaya settingnya tetap nyala
+     * walau server di-restart.
+     */
+    public void setDebug(boolean debug) {
+        this.debug = debug;
+        getConfig().set("debug", debug);
+        saveConfig();
+    }
+
+    /**
+     * Log ke console HANYA kalau debug mode aktif. Dipanggil dari mana saja
+     * (command, listener, bond manager) tanpa perlu cek isDebug() manual
+     * tiap kali - cek-nya sudah ditaruh di sini, sekali saja.
+     */
+    public void debugLog(String message) {
+        if (debug) {
+            getLogger().info("[DEBUG] " + message);
+        }
     }
 
     public Database getDatabase() {

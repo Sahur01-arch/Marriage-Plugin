@@ -60,9 +60,11 @@ public class BondManager {
         marriage.setBondLevel(currentLevel);
 
         notifyXpGained(marriage, amount, currentXp);
+        plugin.debugLog("Bond XP: marriage#" + marriage.getId() + " +" + amount + " (total=" + currentXp + ", level=" + currentLevel + ")");
 
         if (naikLevel) {
             notifyLevelUp(marriage, currentLevel);
+            plugin.debugLog("Bond Level Up: marriage#" + marriage.getId() + " -> level " + currentLevel);
         }
     }
 
