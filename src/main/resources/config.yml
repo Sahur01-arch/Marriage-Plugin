@@ -12,6 +12,15 @@ bond:
   xp-per-fish: 3
   xp-per-level: 100        # XP dibutuhkan naik level = xp-per-level * level saat ini
 
+  # ===== XP dari kedekatan pasangan (proximity) =====
+  proximity:
+    interval-seconds: 5          # tiap berapa detik dicek & dikasih XP kalau pasangan berdekatan
+    xp-per-interval: 5           # XP yang didapat tiap interval
+    max-daily-xp: 200            # batas XP KHUSUS dari kedekatan per hari (terpisah dari bond.max-daily-xp)
+    notify-xp-gained: false      # kalau true, kirim pesan tiap dapat XP dari kedekatan (default MATI biar tidak spam chat)
+    notify-cooldown-seconds: 60  # kalau notify-xp-gained true, jarak minimal antar pesan XP (anti-spam tambahan)
+                                  # pesan "naik level" TETAP selalu muncul walau notify-xp-gained dimatikan
+
 family:
   enabled: true
   allow-adoption: true

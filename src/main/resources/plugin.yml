@@ -1,10 +1,11 @@
 name: Marriage-Plugin
-version: '1.0.2'
+version: '1.0.2 HOTFIX'
 description: "Plugin pernikahan dan sistem keluarga untuk server Minecraft"
 website: "https://github.com/Sahur01-arch/Marriage-Plugin/"
 main: com.ryushin.marriage.MarriagePlugin
 api-version: '1.21'
 author: Ryushin
+# authors: [Ryushin, NamaKedua]   # <- pakai ini kalau kontributornya lebih dari 1 (author tunggal + authors tidak boleh dipakai bersamaan)
 commands:
   marry:
     description: Menikah dengan pemain

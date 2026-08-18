@@ -31,10 +31,32 @@ public class BondManager {
      * Tambahkan XP ke satu pernikahan, otomatis cek & proses level up
      * kalau XP-nya cukup (bisa naik lebih dari 1 level sekaligus).
      *
+     * Overload ini SELALU kirim pesan "XP gained" - dipakai untuk sumber XP
+     * yang jarang terjadi (misal command manual), bukan sumber yang berulang
+     * cepat seperti proximity (pakai addXp(marriage, amount, notifyXpGain)
+     * untuk kasus itu, biar bisa di-silent-kan lewat config).
+     *
      * @param marriage data pernikahan yang mau ditambah XP-nya
      * @param amount   jumlah XP yang ditambahkan (harus > 0)
      */
     public void addXp(Marriage marriage, int amount) {
+        addXp(marriage, amount, true);
+    }
+
+    /**
+     * Sama seperti addXp(marriage, amount), tapi dengan kontrol eksplisit
+     * apakah pesan "bond-xp-gained" mau dikirim atau tidak.
+     *
+     * Pesan "bond-level-up" TIDAK terpengaruh parameter ini - level up itu
+     * milestone berarti, jadi selalu diberi tahu ke pemain terlepas dari
+     * apakah notifikasi XP biasa sedang di-silent-kan.
+     *
+     * @param notifyXpGain false = update XP & database tetap jalan seperti biasa,
+     *                     cuma pesan chat "+X XP" yang di-skip. Dipakai PlayerListener
+     *                     supaya chat nggak kebanjiran pesan tiap 5 detik pas pasangan
+     *                     berdekatan.
+     */
+    public void addXp(Marriage marriage, int amount, boolean notifyXpGain) {
         if (amount <= 0) return;
 
         int xpPerLevel = plugin.getConfig().getInt("bond.xp-per-level", 100);
@@ -59,8 +81,10 @@ public class BondManager {
         marriage.setBondXp(currentXp);
         marriage.setBondLevel(currentLevel);
 
-        notifyXpGained(marriage, amount, currentXp);
-        plugin.debugLog("Bond XP: marriage#" + marriage.getId() + " +" + amount + " (total=" + currentXp + ", level=" + currentLevel + ")");
+        if (notifyXpGain) {
+            notifyXpGained(marriage, amount, currentXp);
+        }
+        plugin.debugLog("Bond XP: marriage#" + marriage.getId() + " +" + amount + " (total=" + currentXp + ", level=" + currentLevel + ", notified=" + notifyXpGain + ")");
 
         if (naikLevel) {
             notifyLevelUp(marriage, currentLevel);

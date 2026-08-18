@@ -20,41 +20,90 @@ public class PlayerListener implements Listener {
     private final MarriagePlugin plugin;
 
     /*
-     * Menyimpan jumlah Bond XP yang sudah diberikan
-     * pada hari berjalan untuk setiap marriage/player.
+     * Menyimpan jumlah Bond XP dari KEDEKATAN (proximity) yang sudah
+     * diberikan pada hari berjalan, per pasangan (marriageKey).
      *
-     * Key menggunakan UUID player.
+     * Ini TERPISAH dari bond.max-daily-xp (total XP dari semua sumber) -
+     * ini cuma nge-cap sumber "berdekatan dengan pasangan" secara spesifik,
+     * sesuai config bond.proximity.max-daily-xp.
      */
-    private final Map<UUID, Integer> dailyBondXp = new HashMap<>();
+    private final Map<UUID, Integer> dailyProximityXp = new HashMap<>();
 
     /*
      * Mencegah pasangan mendapatkan XP setiap tick.
      */
     private final Map<UUID, Long> lastBondGain = new HashMap<>();
 
+    /*
+     * Kapan terakhir kali pesan "bond-xp-gained" dikirim untuk pasangan ini -
+     * dipakai buat throttle notifikasi walau notify-xp-gained di config aktif,
+     * biar tetap nggak spam chat tiap 5 detik.
+     */
+    private final Map<UUID, Long> lastNotifyTime = new HashMap<>();
+
     private BukkitTask bondTask;
 
     /*
-     * Jarak minimum agar pasangan dianggap sedang bersama.
+     * Hari (epoch/ONE_DAY_MILLIS) terakhir kali dailyProximityXp direset.
+     * Dipakai untuk mendeteksi pergantian hari supaya limit harian
+     * benar-benar reset tiap hari, bukan menumpuk selamanya.
      */
-    private static final long BOND_INTERVAL_TICKS = 100L; // 5 detik
+    private long currentDayEpoch;
 
-    /*
-     * XP yang diberikan setiap interval.
-     *
-     * Bisa nanti dipindahkan ke config.
-     */
-    private static final int BOND_XP_PER_INTERVAL = 5;
+    // ===== Nilai-nilai berikut dibaca dari config.yml, lihat loadSettings() =====
+    private long bondIntervalTicks;
+    private int bondXpPerInterval;
+    private int proximityMaxDailyXp;
+    private boolean notifyXpGain;
+    private long notifyCooldownMillis;
 
-    /*
-     * 1 hari dalam milliseconds.
-     */
     private static final long ONE_DAY_MILLIS = 24L * 60L * 60L * 1000L;
 
     public PlayerListener(MarriagePlugin plugin) {
         this.plugin = plugin;
+        this.currentDayEpoch = System.currentTimeMillis() / ONE_DAY_MILLIS;
 
+        loadSettings();
         startBondTask();
+    }
+
+    /**
+     * Baca ulang semua pengaturan proximity XP dari config.yml.
+     * Dipanggil saat plugin enable, dan dari MarriagePlugin.reloadPluginConfig()
+     * supaya admin bisa ubah interval/XP/limit/notify tanpa restart server.
+     */
+    public void loadSettings() {
+        var config = plugin.getConfig();
+
+        int intervalSeconds = config.getInt("bond.proximity.interval-seconds", 5);
+        bondIntervalTicks = intervalSeconds * 20L;
+
+        bondXpPerInterval = config.getInt("bond.proximity.xp-per-interval", 5);
+        proximityMaxDailyXp = config.getInt("bond.proximity.max-daily-xp", 200);
+        notifyXpGain = config.getBoolean("bond.proximity.notify-xp-gained", false);
+
+        int notifyCooldownSeconds = config.getInt("bond.proximity.notify-cooldown-seconds", 60);
+        notifyCooldownMillis = notifyCooldownSeconds * 1000L;
+    }
+
+    /**
+     * Restart scheduler task dengan interval terbaru dari config.
+     * Dipanggil dari reloadSettings() kalau interval-nya berubah.
+     */
+    public void reloadSettings() {
+        loadSettings();
+
+        // Interval bisa berubah, jadi task lama di-cancel & bikin baru
+        // dengan periode yang sesuai config terbaru.
+        if (bondTask != null) {
+            bondTask.cancel();
+        }
+        startBondTask();
+
+        plugin.debugLog("PlayerListener settings direload: interval=" + (bondIntervalTicks / 20L)
+                + "s, xpPerInterval=" + bondXpPerInterval
+                + ", maxDailyXp=" + proximityMaxDailyXp
+                + ", notify=" + notifyXpGain);
     }
 
     /**
@@ -68,13 +117,13 @@ public class PlayerListener implements Listener {
         bondTask = Bukkit.getScheduler().runTaskTimer(
                 plugin,
                 this::processBondXp,
-                BOND_INTERVAL_TICKS,
-                BOND_INTERVAL_TICKS
+                bondIntervalTicks,
+                bondIntervalTicks
         );
     }
 
     /**
-     * Proses Bond XP.
+     * Proses Bond XP dari kedekatan pasangan.
      */
     private void processBondXp() {
 
@@ -85,6 +134,8 @@ public class PlayerListener implements Listener {
         if (plugin.getDatabase() == null) {
             return;
         }
+
+        cekPergantianHari();
 
         for (Player player : Bukkit.getOnlinePlayers()) {
 
@@ -164,14 +215,13 @@ public class PlayerListener implements Listener {
             }
 
             /*
-             * Cek batas daily XP.
+             * Cek batas daily XP KHUSUS proximity (bond.proximity.max-daily-xp),
+             * terpisah dari bond.max-daily-xp yang menaungi semua sumber XP.
              */
-            int maxDailyXp = plugin.getMaxDailyBondXp();
-
             int currentDailyXp =
-                    dailyBondXp.getOrDefault(marriageKey, 0);
+                    dailyProximityXp.getOrDefault(marriageKey, 0);
 
-            if (currentDailyXp >= maxDailyXp) {
+            if (currentDailyXp >= proximityMaxDailyXp) {
                 continue;
             }
 
@@ -179,8 +229,8 @@ public class PlayerListener implements Listener {
              * Jangan melebihi daily limit.
              */
             int xpToGive = Math.min(
-                    BOND_XP_PER_INTERVAL,
-                    maxDailyXp - currentDailyXp
+                    bondXpPerInterval,
+                    proximityMaxDailyXp - currentDailyXp
             );
 
             if (xpToGive <= 0) {
@@ -190,7 +240,7 @@ public class PlayerListener implements Listener {
             /*
              * Tandai bahwa XP sudah diberikan.
              */
-            dailyBondXp.put(
+            dailyProximityXp.put(
                     marriageKey,
                     currentDailyXp + xpToGive
             );
@@ -201,24 +251,30 @@ public class PlayerListener implements Listener {
             );
 
             /*
-             * Bond XP belum dimasukkan ke Marriage/database
-             * karena class Marriage saat ini belum memiliki
-             * setter/addXp dan Database belum memiliki
-             * updateMarriageBond().
-             *
-             * Setelah method database ditambahkan,
-             * panggil update di bagian ini.
+             * Tentukan apakah pesan "+X XP" perlu dikirim kali ini:
+             * - notify-xp-gained harus true di config
+             * - DAN sudah lewat notify-cooldown-seconds sejak notifikasi terakhir
+             * Ini lapisan anti-spam KEDUA di atas toggle on/off - jadi walau
+             * admin nyalain notify, tetap nggak akan spam tiap 5 detik.
              */
+            boolean kirimNotifikasi = false;
+
+            if (notifyXpGain) {
+                Long lastNotify = lastNotifyTime.get(marriageKey);
+                if (lastNotify == null || now - lastNotify >= notifyCooldownMillis) {
+                    kirimNotifikasi = true;
+                    lastNotifyTime.put(marriageKey, now);
+                }
+            }
 
             processBondReward(
                     player,
                     spouse,
                     marriage,
-                    xpToGive
+                    xpToGive,
+                    kirimNotifikasi
             );
         }
-
-        cleanupDailyData();
     }
 
     /**
@@ -226,19 +282,19 @@ public class PlayerListener implements Listener {
      *
      * Diteruskan ke BondManager, yang akan:
      * - update bond_xp/bond_level ke database (via Database.updateBond)
-     * - kirim pesan "bond-xp-gained" ke kedua pasangan
-     * - kalau XP-nya cukup buat naik level, kirim pesan "bond-level-up" juga
-     * Kedua pesan itu diambil dari config.yml lewat MessageUtil, jadi admin
-     * server bisa ubah teksnya tanpa recompile plugin.
+     * - kirim pesan "bond-xp-gained" ke kedua pasangan HANYA kalau notify true
+     * - kalau XP-nya cukup buat naik level, kirim pesan "bond-level-up" (SELALU,
+     *   terlepas dari status notify - level up bukan spam, itu milestone)
      */
     private void processBondReward(
             Player player,
             Player spouse,
             Marriage marriage,
-            int xp
+            int xp,
+            boolean notify
     ) {
 
-        plugin.getBondManager().addXp(marriage, xp);
+        plugin.getBondManager().addXp(marriage, xp, notify);
     }
 
     /**
@@ -261,23 +317,20 @@ public class PlayerListener implements Listener {
     }
 
     /**
-     * Membersihkan data daily XP yang sudah lebih
-     * dari satu hari.
-     *
-     * Implementasi sederhana:
-     * seluruh cache dibersihkan setiap pergantian
-     * hari berdasarkan timestamp terakhir.
+     * Cek apakah sudah ganti hari sejak terakhir kali dailyProximityXp
+     * direset. Kalau iya, kosongkan cache-nya supaya limit harian
+     * benar-benar mulai dari 0 lagi tiap hari - bukan cuma numpuk terus
+     * sampai plugin/server restart.
      */
-    private void cleanupDailyData() {
+    private void cekPergantianHari() {
+        long hariIni = System.currentTimeMillis() / ONE_DAY_MILLIS;
 
-        /*
-         * Karena dailyBondXp hanya menyimpan integer,
-         * kita tidak bisa mengetahui umur masing-masing
-         * entry.
-         *
-         * Cache ini akan dibersihkan berdasarkan timestamp
-         * global pada implementasi berikutnya.
-         */
+        if (hariIni != currentDayEpoch) {
+            dailyProximityXp.clear();
+            lastNotifyTime.clear();
+            currentDayEpoch = hariIni;
+            plugin.debugLog("Reset harian: dailyProximityXp dikosongkan (hari baru).");
+        }
     }
 
     /**
@@ -320,7 +373,8 @@ public class PlayerListener implements Listener {
             bondTask = null;
         }
 
-        dailyBondXp.clear();
+        dailyProximityXp.clear();
         lastBondGain.clear();
+        lastNotifyTime.clear();
     }
 }

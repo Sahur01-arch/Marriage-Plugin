@@ -150,6 +150,11 @@ public class MarriagePlugin extends JavaPlugin {
     public void reloadPluginConfig() {
         reloadConfig();
         loadConfigValues();
+
+        if (playerListener != null) {
+            playerListener.reloadSettings();
+        }
+
         getLogger().info("Config berhasil di-reload. Debug mode: " + (debug ? "ON" : "OFF"));
     }
 
